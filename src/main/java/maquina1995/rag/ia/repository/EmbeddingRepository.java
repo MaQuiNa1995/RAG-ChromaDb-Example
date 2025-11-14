@@ -13,23 +13,44 @@ import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Clase encargada para la interacción con chromaDB para la persistencia y consulta
+ * 
+ * @author MaQuiNa1995
+ *
+ */
 @Component
 @RequiredArgsConstructor
 public class EmbeddingRepository {
 
 	private final VectorStore vectorStore;
 
-	// Constantes de búsqueda
+	/**
+	 * Esta variable define el factor de similitud con la que busca en la base de datos vectorial
+	 */
 	public final static double SIMILARITY_THRESHOLD = 0.2;
 	public final static int TOP_K = 5;
 
+	/**
+	 * Metodo usado para guardar en base de datos
+	 * 
+	 * @param id clave UUID 
+	 * @param texto la descripcion del registro en base de datos
+	 * @param metadata mapa que define los metadata del registro
+	 */
 	public void save(String id, String texto, Map<String, Object> metadata) {
 
+		/**
+		 * Creamos un clon del metadata que nos pasan por parámetro para no ensuciar la referencia porque re-usamos la variable (ver el service)
+		 */
 		Map<String, Object> clonedMetadata = new HashMap<>(metadata);
+		// Le añadimos el id
 		clonedMetadata.put("id", id);
 
+		// Creamos el registro de BD con el texto y los metadatos asociados
 		Document document = new Document(texto, clonedMetadata);
 
+		// Llamamos al vectorStore para guardar el documento
 		vectorStore.add(List.of(document));
 
 		System.out.println("Documento con ID: " + id + " agregado al VectorStore (ChromaDB).");
@@ -45,15 +66,14 @@ public class EmbeddingRepository {
 	 */
 	public String getContextForChatbot(String userQuery, Map<String, String> metadataFilters) {
 
-		// 1. Construir el objeto SearchRequest de Spring AI, usando el Builder y las
-		// constantes.
+		// Creamos el SearchRequest que es basicamente el objeto para hacer la consulta
 		SearchRequest searchRequest = SearchRequest.builder()
 				.query(userQuery)
 				.topK(TOP_K)
 				.similarityThreshold(SIMILARITY_THRESHOLD)
 				.build();
 
-		// 2. Ejecutar la Búsqueda en ChromaDB
+		// Le pasamos la query a la base de datos y obtenemos los documentos relevantes con la similitud que hemos configurado en la query
 		List<Document> relevantDocuments = vectorStore.similaritySearch(searchRequest);
 
 		if (relevantDocuments.isEmpty()) {
@@ -97,6 +117,7 @@ public class EmbeddingRepository {
 			return "Se encontraron documentos por similitud, pero ninguno coincidió con los filtros de metadatos proporcionados.";
 		}
 
+		// aqui construimos el contexto con 3 guiones separando cada uno de los documentos encontrados
 		String context = filteredDocuments.stream()
 				.map(Document::getText)
 				.collect(Collectors.joining("\n---\n"));

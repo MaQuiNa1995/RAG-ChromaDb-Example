@@ -11,6 +11,7 @@ import maquina1995.rag.ia.jackson.JacksonService;
 import maquina1995.rag.ia.repository.EmbeddingRepository;
 
 /**
+ * Clase encargada de manejar la logica de la parte de persistencia de la base de datos ChromaDB
  * 
  * @author MaQuiNa1995
  *
@@ -19,17 +20,49 @@ import maquina1995.rag.ia.repository.EmbeddingRepository;
 @RequiredArgsConstructor
 public class EmbeddingService {
 
+	/**
+	 * objeto encargado de la comunicacion de la base de datos
+	 */
 	private final EmbeddingRepository embeddingRepository;
+	/**
+	 * Objeto encargado de la logica de Serializacion y de-serializacion de json
+	 */
 	private final JacksonService jacksonService;
 	
+	/**
+	 * Método usado para crear los registros de base de datos y pasarlos al repository para el guardado
+	 * 
+	 * Si nos fijamos los registros en una base de datos vectorial se dividen en 2 partes
+	 * - Frase o descripcion del registro
+	 * - Metadatos estos metadatos se agrupan en un mapa String Object en el que se guarda las partes mas importantes de la oracion anterior
+	 * 
+	 * Es decir si tenemos esta oracion: El objeto Amplificador bellamente grabado es un Collar que cae en la mazmorra Tazavesh: Gambito de So'leah
+	 * Los metadatos que tendría ese registro deberían ser aquellos por los que la logica de negocio deba filtrarlo para construir posteriormente
+	 * en nuestro caso el contexto que usará el LLM para dar la respuesta al usuario
+	 * 
+	 * En este caso:
+	 * "tipo", "collar"		
+	 * "mazmorra", "Tazavesh: Gambito de So'leah"
+	 * 
+	 * 
+	 */
 	public void createEmbeddings() {
-
+		
+		/**
+		 *  Como nota aclaratoria se reusa en cada tipo de objeto el mapa para simplificar la creacion de
+		 * los metadatos y porque dentro del metodo save se hace el clone del mismo para no modificar por referencia el mapa y añadir el metadato del id que es unico para cada uno
+		 * 
+		 * Esto se ve mejor en la documentacion del metodo save 
+		 */
+		
+		//
 		// =========================================================================
 		// 1. ACCESORIOS (Collares, Anillos, Capa)
 		// =========================================================================
 		// Collares
 		Map<String, Object> metadataCollares = new HashMap<>();
-		metadataCollares.put("tipo", "collar");		
+		metadataCollares.put("tipo", "collar");
+		
 		metadataCollares.put("mazmorra", "Tazavesh: Gambito de So'leah");
 		embeddingRepository.save("collar-" + UUID.randomUUID().toString(), "El objeto Amplificador bellamente grabado es un Collar que cae en la mazmorra Tazavesh: Gambito de So'leah", metadataCollares);
 		metadataCollares.put("mazmorra", "Tazavesh: So'leah's Gambit");
@@ -57,7 +90,7 @@ public class EmbeddingService {
         embeddingRepository.save("anillo-" + UUID.randomUUID().toString(), "El objeto Sello de la falsa acusadora es un Anillo que cae en la mazmorra Salas de la Expiación", metadataAnillos);
 
 		// Capa
-		embeddingRepository.save("info-" + UUID.randomUUID().toString(), "El Mantón reshii es la única capa y no tiene otros drops de mazmorras míticas+ ni Raid.", Map.of("tipo", "capa"));
+		embeddingRepository.save("capa-" + UUID.randomUUID().toString(), "El Mantón reshii es la única capa y no tiene otros drops de mazmorras míticas+ ni Raid.", Map.of("tipo", "capa"));
 
 
 		// =========================================================================
@@ -126,7 +159,6 @@ public class EmbeddingService {
 		Map<String, Object> metadataCuero = new HashMap<>();
 		metadataCuero.put("tipo", "armadura");
 		metadataCuero.put("clase", "cuero");
-
 
 		metadataCuero.put("mazmorra", "Priorato de la Llama Sagrada");
 		embeddingRepository.save("cuero-" + UUID.randomUUID().toString(), "El objeto Yelmo de la cruzada honrada es un Casco de Cuero que cae en la mazmorra Priorato de la Llama Sagrada", metadataCuero);
@@ -300,10 +332,20 @@ public class EmbeddingService {
 		embeddingRepository.save("placas-" + UUID.randomUUID().toString(), "El objeto Botines resistentes a la intemperie implacables son Pies de Placas que caen en la mazmorra Tazavesh: Gambito de So'leah", metadataPlaca);
 	}
 	
+	/**
+	 * Método usado para la creacion del contexto a partir del json que extrae el LLM 
+	 * 
+	 * @param userQuery la pregunta del usuario
+	 * @param filterTipo el filtro en formato String json que el LLM ha extraido de la pregunta del usuario
+	 * 
+	 * @return contexto para ser usado por el LLM para dar una respuesta y que no use su conocimiento general (Lo que se llama como RAG)
+	 */
     public String getContextForChatbot(String userQuery, String filterTipo) {
 
+    	// Aqui deserializamos el json a un mapa String String
     	Map<String, String> metadataMap = jacksonService.jsonToMap(filterTipo);
         
+    	// Llamamos al repositorio para obtener un contexto que usará el LLM para responder la pregunta del usuario
 		return embeddingRepository.getContextForChatbot(userQuery, metadataMap);
         
     }
